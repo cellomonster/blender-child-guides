@@ -10,7 +10,7 @@ bl_info = {
 }
 
 import bpy
-from bpy.types import Object, Operator, ParticleSystem
+from bpy.types import ID, Object, Operator, ParticleSystem, ParticleSystems
 
 class ChildGuides_GenChildGuides(Operator):
     bl_idname = "armature.bj_mark_bone_side"
@@ -21,6 +21,8 @@ class ChildGuides_GenChildGuides(Operator):
     obj: Object = None # Object we are working with
     system: ParticleSystem = None # Primary particle system we are working with
     gen: ParticleSystem = None # Generated particle system to work with
+    systemName: str
+    filterStr: str = "%CHILDGUIDES_IGNORE%"
 
     def button(self, context):
         """Function for registering this class to a button in Blender's UI layout"""
@@ -47,15 +49,52 @@ class ChildGuides_GenChildGuides(Operator):
             return {'FINISHED'}
         self.system = self.obj.particle_systems.active
         if self.system == None or self.system.settings.type != 'HAIR': # Return if there is no valid hair modifier
-            self.report({'WARNING'}, "No valid modifier selected")
+            self.report({'WARNING'}, "No valid modifier selected (must be Particle object with Hair enabled)")
             return {'FINISHED'}
         
+        self.systemName = self.system.name # Store name
+        self.system.name = "!CHILDGUIDES_DUPLICATION" # Override name for easy duplication
+        for item in self.obj.particle_systems.values():
+            item.name += self.filterStr
+        
         bpy.ops.particle.duplicate_particle_system(use_duplicate_settings=True) # Create a clone of this system
-        self.gen = self.obj.particle_systems.values()[len(self.obj.particle_systems) - 1] # Get newly created particle system and store it
+        # This above method duplicates ALL particle systems in the object, but we only want to duplicate the active one
+        # bpy.ops.particle.copy_particle_systems only copies particle systems from the active object to other objects
+        #    in selection that are NOT the active object
+        # Thus, we need to instead filter out what particles we don't want
+
+        # Iterate through all particle systems
+        for key in self.obj.particle_systems.keys():
+            item: ParticleSystem = self.obj.particle_systems[key]
+
+            # If the duplicate has a similar name to our active particle system, but isn't the same object...
+            if item.name.startswith(self.system.name) and not item.name.endswith(self.system.name):
+                self.gen = item # This is (very hopefully) our duplicated particle system!
+            
+            elif self.filterStr in item.name: # Otherwise, this is one of the other systems
+                if item.name.endswith(self.filterStr): # This is an original system since it doesn't have a digit ending
+                    item.name = item.name.replace(self.filterStr, "") # Rename it back to orignial
+                else: # Otherwise, this is a clone, and we should delete it
+                    self.obj.particle_systems.active_index = self.obj.particle_systems.values().index(item, 0)
+                    bpy.ops.object.particle_system_remove()
+        
+        self.system.name = self.systemName
+        if self.gen == None:
+            self.report({'ERROR'}, "Could not find duplicate of active particle system!")
+            return {'FINISHED'}
+        
+        self.gen.name = self.systemName + "_Regenerated"
+        systems: ParticleSystems = self.obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).particle_systems
+        
+        # Update systems to use new generated settings
+        for item in systems.values():
+            if item.name == self.system.name:
+                self.system = item
+            elif item.name == self.gen.name:
+                self.gen = item
 
         # Set the count of the new system to the number of child particles of the old system
         self.gen.settings.count = len(self.system.child_particles.values())
-        print(self.system.child_particles.values())
 
         # TODO: Get children and do stuff
         
