@@ -10,7 +10,7 @@ bl_info = {
 }
 
 import bpy
-from bpy.types import ID, Object, Operator, ParticleSystem, ParticleSystems
+from bpy.types import ID, Object, Operator, Particle, ParticleSystem, ParticleSystems
 
 class ChildGuides_GenChildGuides(Operator):
     bl_idname = "armature.bj_mark_bone_side"
@@ -78,12 +78,12 @@ class ChildGuides_GenChildGuides(Operator):
                     self.obj.particle_systems.active_index = self.obj.particle_systems.values().index(item, 0)
                     bpy.ops.object.particle_system_remove()
         
-        self.system.name = self.systemName
-        if self.gen == None:
+        self.system.name = self.systemName # Reset system name
+        if self.gen == None: # If we didn't get what we found, return before we break something
             self.report({'ERROR'}, "Could not find duplicate of active particle system!")
             return {'FINISHED'}
         
-        self.gen.name = self.systemName + "_Regenerated"
+        self.gen.name = self.systemName + "_Regenerated" # Give duplicate copy a readable name
         systems: ParticleSystems = self.obj.evaluated_get(bpy.context.evaluated_depsgraph_get()).particle_systems
         
         # Update systems to use new generated settings
@@ -96,7 +96,25 @@ class ChildGuides_GenChildGuides(Operator):
         # Set the count of the new system to the number of child particles of the old system
         self.gen.settings.count = len(self.system.child_particles.values())
 
-        # TODO: Get children and do stuff
+        childArray = self.system.child_particles.values()
+        guideArray = self.gen.particles.values()
+        for idx in range(0, len(childArray)):
+            child: Particle = childArray[idx]
+            guide: Particle = guideArray[idx]
+
+            print(child, guide)
+
+            # guide.location = child.location
+            # guide.rotation = child.rotation
+            # guide.velocity = child.velocity
+            # guide.angular_velocity = child.angular_velocity
+
+            # childKeys = child.hair_keys.values()
+            # guideKeys = guide.hair_keys.values()
+            # for key in range(0, len(childKeys)):
+            #     guideKeys[key].co = childKeys[key].co
+            #     guideKeys[key].time = childKeys[key].time
+            #     guideKeys[key].weight = childKeys[key].weight
         
         return {'FINISHED'}
 
